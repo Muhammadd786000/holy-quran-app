@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holy Quran Digital</title>
+    <style>
+        :root {
+            --primary: #0f4c3a; /* Islamic Green Theme */
+            --accent: #d4af37;  /* Premium Gold Theme */
+            --dark: #2c3e50;
+            --light: #f4f7f5;
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: var(--light);
+            margin: 0;
+            padding: 0;
+            color: var(--dark);
+        }
+        .app-header {
+            background: var(--primary);
+            color: white;
+            padding: 20px 15px;
+            text-align: center;
+            border-bottom: 4px solid var(--accent);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .app-header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .sync-status {
+            font-size: 12px;
+            color: #e0e0e0;
+            margin-top: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4d4d; }
+        .status-dot.active { background: #2ecc71; }
+
+        .container { max-width: 600px; margin: 20px auto; padding: 0 15px; box-sizing: border-box; }
+        
+        .tab-nav { 
+            display: flex; 
+            background: white; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .tab-btn { 
+            flex: 1; 
+            padding: 15px; 
+            background: none; 
+            border: none; 
+            font-size: 16px; 
+            cursor: pointer; 
+            font-weight: bold;
+            color: #7f8c8d;
+            transition: all 0.3s;
+        }
+        .tab-btn.active { 
+            background: var(--primary); 
+            color: white; 
+            border-bottom: 3px solid var(--accent);
+        }
+        
+        .list-container { 
+            background: white; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); 
+            padding: 5px 0;
+        }
+        .item-card {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .item-card:hover { background: #fafafa; }
+        .item-card:last-child { border-bottom: none; }
+        
+        .info-part { display: flex; flex-direction: column; }
+        .item-num { font-size: 12px; color: #95a5a6; font-weight: bold; }
+        .item-name { font-size: 16px; font-weight: 600; margin-top: 2px; }
+
+        .btn-action {
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+            border: 1px solid var(--primary);
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn-action:hover { background: #0b3629; }
+        .btn-disabled { 
+            background: #e0e0e0; 
+            color: #95a5a6; 
+            border-color: #e0e0e0;
+            cursor: not-allowed; 
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Top Bar like Real Apps -->
+    <div class="app-header">
+        <h1>Holy Quran</h1>
+        <div class="sync-status">
+            <span id="status-dot" class="status-dot"></span>
+            <span id="status-text">Loading App...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Navigation Tabs -->
+        <div class="tab-nav">
+            <button class="tab-btn active" id="tab-surah" onclick="switchView('surah')">SURAH</button>
+            <button class="tab-btn" id="tab-parah" onclick="switchView('parah')">PARA / JUZ</button>
+        </div>
+
+        <!-- Main Quran List -->
+        <div class="list-container" id="main-list">
+            <!-- List updates dynamically -->
+        </div>
+    </div>
+
+    <script>
+        let currentView = 'surah';
+        let localDb = { surahs: {}, parahs: {} };
+
+        // **IMPORTANT:** Jab aap isko online hosting par daalenge, 
+        // toh apni hosted quran.json file ka link yahan lagayenge.
+        const JSON_URL = "quran.json"; 
+
+        const surahNames = [
+            "Al-Fatiha","Al-Baqarah","Ali 'Imran","An-Nisa'","Al-Ma'idah","Al-An'am","Al-A'raf","Al-Anfal","At-Tawbah","Yunus","Hud",
+            "Yusuf","Ar-Ra'd","Ibrahim","Al-Hijr","An-Nahl","Al-Isra'","Al-Kahf","Maryam","Ta-Ha","Al-Anbiya'","Al-Hajj","Al-Mu'minun",
+            "An-Nur","Al-Furqan","Ash-Shu'ara'","An-Naml","Al-Qasas","Al-'Ankabut","Ar-Rum","Luqman","As-Sajdah","Al-Ahzab","Saba'",
+            "Fatir","Ya-Sin","As-Saffat","Sad","Az-Zumar","Ghafir","Fussilat","Ash-Shura","Az-Zukhruf","Ad-Dukhan","Al-Jathiyah",
+            "Al-Ahqaf","Muhammad","Al-Fath","Al-Hujurat","Qaf","Adh-Dhariyat","At-Tur","An-Najm","Al-Qamar","Ar-Rahman","Al-Waqi'ah",
+            "Al-Hadid","Al-Mujadilah","Al-Hashr","Al-Mumtahanah","As-Saff","Al-Jumu'ah","Al-Munafiqun","At-Taghabun","At-Talaq",
+            "At-Tahrim","Al-Mulk","Al-Qalam","Al-Haqqah","Al-Ma'arij","Nuh","Al-Jinn","Al-Muzzammil","Al-Muddaththir","Al-Qiyamah",
+            "Al-Insan","Al-Mursalat","An-Naba'","An-Nazi'at","'Abasa","At-Takwir","Al-Infitar","Al-Mutaffifin","Al-Inshiqaq",
+            "Al-Buruj","At-Tariq","Al-A'la","Al-Ghashiyah","Al-Fajr","Al-Balad","Ash-Shams","Al-Layl","Ad-Duha","Ash-Sharh",
+            "At-Tin","Al-'Alaq","Al-Qadr","Al-Bayyinah","Az-Zalzalah","Al-'Adiyat","Al-Qari'ah","At-Takathur","Al-'Asr",
+            "Al-Humazah","Al-Fil","Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr","Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas"
+        ];
+
+        window.onload = function() {
+            // 1. Pehle check karo offline storage me purana data pada hai?
+            const savedData = localStorage.getItem('offline_quran_data');
+            if(savedData) {
+                localDb = JSON.parse(savedData);
+                updateStatus(true, "Offline Mode Ready");
+                renderList();
+            }
+            
+            // 2. Background me automatic naya data fetch karo bina user ko pareshan kiye
+            autoFetchUpdates();
+        };
+
+        function updateStatus(isReady, text) {
+            const dot = document.getElementById('status-dot');
+            const statusTxt = document.getElementById('status-text');
+            statusTxt.innerText = text;
+            if(isReady) dot.classList.add('active');
+            else dot.classList.remove('active');
+        }
+
+        function autoFetchUpdates() {
+            fetch(JSON_URL)
+                .then(response => response.json())
+                .then(data => {
+                    // Naya data mil gaya! Ise chupke se save karlo
+                    localStorage.setItem('offline_quran_data', JSON.stringify(data));
+                    localDb = data;
+                    updateStatus(true, "Synced & Live");
+                    renderList();
+                })
+                .catch(err => {
+                    console.log("Offline running or server file not reached yet.");
+                    if(!localStorage.getItem('offline_quran_data')) {
+                        updateStatus(false, "Connect internet once to sync data");
+                    }
+                });
+        }
+
+        function switchView(view) {
+            currentView = view;
+            document.getElementById('tab-surah').classList.toggle('active', view === 'surah');
+            document.getElementById('tab-parah').classList.toggle('active', view === 'parah');
+            renderList();
+        }
+
+        function renderList() {
+            const listDiv = document.getElementById('main-list');
+            listDiv.innerHTML = '';
+
+            if(currentView === 'surah') {
+                surahNames.forEach((name, index) => {
+                    const surahId = index + 1;
+                    let pdfLink = "#";
+                    let isAvailable = false;
+
+                    if(localDb && localDb.surahs && localDb.surahs[surahId] && localDb.surahs[surahId].verses["1"]) {
+                        pdfLink = localDb.surahs[surahId].verses["1"].pdf;
+                        isAvailable = pdfLink ? true : false;
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'item-card';
+                    card.innerHTML = `
+                        <div class="info-part">
+                            <span class="item-num">SURAH ${surahId}</span>
+                            <span class="item-name">${name}</span>
+                        </div>
+                        ${isAvailable ? `<a href="${pdfLink}" target="_blank" class="btn-action">READ PDF</a>` : `<span class="btn-action btn-disabled">COMING SOON</span>`}
+                    `;
+                    listDiv.appendChild(card);
+                });
+            } else {
+                for(let i = 1; i <= 30; i++) {
+                    let pdfLink = "#";
+                    let isAvailable = false;
+
+                    if(localDb && localDb.parahs && localDb.parahs[i]) {
+                        pdfLink = localDb.parahs[i].pdf;
+                        isAvailable = pdfLink ? true : false;
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'item-card';
+                    card.innerHTML = `
+                        <div class="info-part">
+                            <span class="item-num">PARA / JUZ</span>
+                            <span class="item-name">Parah ${i}</span>
+                        </div>
+                        ${isAvailable ? `<a href="${pdfLink}" target="_blank" class="btn-action">READ PDF</a>` : `<span class="btn-action btn-disabled">COMING SOON</span>`}
+                    `;
+                    listDiv.appendChild(card);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

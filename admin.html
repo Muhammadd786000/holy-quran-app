@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZaidTech | Quran Admin Dashboard</title>
+    <style>
+        :root {
+            --primary: #1e3d59;
+            --success: #17b978;
+            --dark: #2c3e50;
+            --light: #f7f9fa;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light);
+            color: var(--dark);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        h2 { color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea { height: 80px; resize: vertical; }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover { background-color: #13293d; }
+        .btn-success { background-color: var(--success); }
+        .btn-success:hover { background-color: #11945f; }
+        #login-screen { max-width: 400px; margin: 100px auto; text-align: center; }
+        .hidden { display: none !important; }
+        .json-preview {
+            background: #272822;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: monospace;
+            max-height: 200px;
+        }
+        .tab-buttons { margin-bottom: 20px; }
+        .tab-btn { background: #ccc; color: black; margin-right: 5px; padding: 8px 15px; font-size: 14px;}
+        .tab-btn.active { background: var(--primary); color: white; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. AUTHENTICATION GUARD -->
+    <div id="login-screen" class="container">
+        <h2>Admin Login</h2>
+        <div class="form-group">
+            <input type="password" id="admin-password" placeholder="Enter Admin Password">
+        </div>
+        <button onclick="checkAuth()">Login</button>
+        <p id="login-error" style="color: red; margin-top: 10px;"></p>
+    </div>
+
+    <!-- 2. MAIN ADMIN DASHBOARD -->
+    <div id="dashboard-screen" class="container hidden">
+        <h2>Quran App Content Manager</h2>
+        
+        <!-- Tab Switches: Surah wise ya Parah wise data entry -->
+        <div class="tab-buttons">
+            <button class="tab-btn active" id="btn-surah" onclick="switchMode('surah')">Manage By Surah (114)</button>
+            <button class="tab-btn" id="btn-parah" onclick="switchMode('parah')">Manage By Parah/Juz (30)</button>
+        </div>
+
+        <!-- Dynamic Dropdown Drop/Select -->
+        <div class="form-group">
+            <label id="selection-label" for="main-select">Select Surah:</label>
+            <select id="main-select" onchange="loadCurrentData()">
+                <!-- JS auto populate karega -->
+            </select>
+        </div>
+
+        <div class="form-group" id="ayat-input-group">
+            <label for="ayat-number">Ayat Number (Optional if uploading full PDF):</label>
+            <input type="number" id="ayat-number" value="1" min="1">
+        </div>
+
+        <div class="form-group">
+            <label for="pdf-url">PDF Link / Drive URL:</label>
+            <input type="url" id="pdf-url" placeholder="https://drive.google.com/file/d/.../view">
+        </div>
+
+        <div class="form-group">
+            <label for="translation-text">Short Description / Note:</label>
+            <textarea id="translation-text" placeholder="Add any specific details or notes here..."></textarea>
+        </div>
+
+        <button onclick="saveData()">Save Entry</button>
+        <button class="btn-success" onclick="exportJSON()" style="margin-left: 10px;">Export quran.json</button>
+
+        <hr style="margin: 30px 0; border: 0; border-top: 1px solid #ccc;">
+
+        <h3>Live Database Preview (JSON)</h3>
+        <pre class="json-preview" id="json-display">{}</pre>
+    </div>
+
+    <script>
+        const SECRETPASS = "admin123"; 
+        let currentMode = 'surah'; // default mode
+        
+        // Final Output Database State
+        let quranDatabase = {
+            "surahs": {},
+            "parahs": {}
+        };
+
+        // 114 Surah Names List
+        const surahNames = [
+            "Al-Fatiha","Al-Baqarah","Ali 'Imran","An-Nisa'","Al-Ma'idah","Al-An'am","Al-A'raf","Al-Anfal","At-Tawbah","Yunus","Hud",
+            "Yusuf","Ar-Ra'd","Ibrahim","Al-Hijr","An-Nahl","Al-Isra'","Al-Kahf","Maryam","Ta-Ha","Al-Anbiya'","Al-Hajj","Al-Mu'minun",
+            "An-Nur","Al-Furqan","Ash-Shu'ara'","An-Naml","Al-Qasas","Al-'Ankabut","Ar-Rum","Luqman","As-Sajdah","Al-Ahzab","Saba'",
+            "Fatir","Ya-Sin","As-Saffat","Sad","Az-Zumar","Ghafir","Fussilat","Ash-Shura","Az-Zukhruf","Ad-Dukhan","Al-Jathiyah",
+            "Al-Ahqaf","Muhammad","Al-Fath","Al-Hujurat","Qaf","Adh-Dhariyat","At-Tur","An-Najm","Al-Qamar","Ar-Rahman","Al-Waqi'ah",
+            "Al-Hadid","Al-Mujadilah","Al-Hashr","Al-Mumtahanah","As-Saff","Al-Jumu'ah","Al-Munafiqun","At-Taghabun","At-Talaq",
+            "At-Tahrim","Al-Mulk","Al-Qalam","Al-Haqqah","Al-Ma'arij","Nuh","Al-Jinn","Al-Muzzammil","Al-Muddaththir","Al-Qiyamah",
+            "Al-Insan","Al-Mursalat","An-Naba'","An-Nazi'at","'Abasa","At-Takwir","Al-Infitar","Al-Mutaffifin","Al-Inshiqaq",
+            "Al-Buruj","At-Tariq","Al-A'la","Al-Ghashiyah","Al-Fajr","Al-Balad","Ash-Shams","Al-Layl","Ad-Duha","Ash-Sharh",
+            "At-Tin","Al-'Alaq","Al-Qadr","Al-Bayyinah","Az-Zalzalah","Al-'Adiyat","Al-Qari'ah","At-Takathur","Al-'Asr",
+            "Al-Humazah","Al-Fil","Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr","Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas"
+        ];
+
+        function checkAuth() {
+            const pass = document.getElementById('admin-password').value;
+            if(pass === SECRETPASS) {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard-screen').classList.remove('hidden');
+                populateDropdown();
+                updateJSONPreview();
+            } else {
+                document.getElementById('login-error').innerText = "Wrong Password! Try again.";
+            }
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-surah').classList.toggle('active', mode === 'surah');
+            document.getElementById('btn-parah').classList.toggle('active', mode === 'parah');
+            
+            if(mode === 'surah') {
+                document.getElementById('selection-label').innerText = "Select Surah:";
+                document.getElementById('ayat-input-group').classList.remove('hidden');
+            } else {
+                document.getElementById('selection-label').innerText = "Select Parah (Juz):";
+                document.getElementById('ayat-input-group').classList.add('hidden');
+            }
+            populateDropdown();
+            loadCurrentData();
+        }
+
+        function populateDropdown() {
+            const select = document.getElementById('main-select');
+            select.innerHTML = '';
+            
+            if(currentMode === 'surah') {
+                surahNames.forEach((name, index) => {
+                    let opt = document.createElement('option');
+                    opt.value = index + 1;
+                    opt.innerText = `${index + 1}. ${name}`;
+                    select.appendChild(opt);
+                });
+            } else {
+                for(let i = 1; i <= 30; i++) {
+                    let opt = document.createElement('option');
+                    opt.value = i;
+                    opt.innerText = `Parah / Juz ${i}`;
+                    select.appendChild(opt);
+                }
+            }
+        }
+
+        function loadCurrentData() {
+            const id = document.getElementById('main-select').value;
+            const ayat = document.getElementById('ayat-number').value;
+            
+            if(currentMode === 'surah') {
+                if(quranDatabase.surahs[id] && quranDatabase.surahs[id].verses[ayat]) {
+                    document.getElementById('pdf-url').value = quranDatabase.surahs[id].verses[ayat].pdf || "";
+                    document.getElementById('translation-text').value = quranDatabase.surahs[id].verses[ayat].note || "";
+                } else {
+                    document.getElementById('pdf-url').value = "";
+                    document.getElementById('translation-text').value = "";
+                }
+            } else {
+                if(quranDatabase.parahs[id]) {
+                    document.getElementById('pdf-url').value = quranDatabase.parahs[id].pdf || "";
+                    document.getElementById('translation-text').value = quranDatabase.parahs[id].note || "";
+                } else {
+                    document.getElementById('pdf-url').value = "";
+                    document.getElementById('translation-text').value = "";
+                }
+            }
+        }
+
+        function saveData() {
+            const id = document.getElementById('main-select').value;
+            const pdf = document.getElementById('pdf-url').value;
+            const note = document.getElementById('translation-text').value;
+
+            if(currentMode === 'surah') {
+                const ayat = document.getElementById('ayat-number').value;
+                if(!quranDatabase.surahs[id]) {
+                    quranDatabase.surahs[id] = { "name": surahNames[id-1], "verses": {} };
+                }
+                quranDatabase.surahs[id].verses[ayat] = { "pdf": pdf, "note": note };
+            } else {
+                quranDatabase.parahs[id] = { "pdf": pdf, "note": note };
+            }
+
+            updateJSONPreview();
+            alert("Entry Saved Successfully!");
+        }
+
+        function updateJSONPreview() {
+            document.getElementById('json-display').innerText = JSON.stringify(quranDatabase, null, 2);
+        }
+
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(quranDatabase));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "quran.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+    </script>
+</body>
+</html>
